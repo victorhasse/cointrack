@@ -1,2 +1,404 @@
 <!DOCTYPE html>
-<html lang="pt-BR"></html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CoinTrack FX — Dashboard Financeiro</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/styles.css">
+
+  <!-- Chart.js (UMD, deve carregar antes dos módulos ES)-->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     SIDEBAR (BARA LATERAL)
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="sidebar" id="sidebar">
+  <div class="logo">
+    <div class="logo-mark">Coin<span>Track</span></div>
+    <div class="logo-sub">FX Dashboard</div>
+  </div>
+
+  <nav class="nav">
+    <div class="nav-section">
+      <div class="nav-label">Mercado</div>
+      <a class="nav-item active" href="#market" onclick="setActive(this)">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
+        </svg>
+        Visão Geral
+      </a>
+      <a class="nav-item" href="#chart-section" onclick="setActive(this)">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <rect x="2" y="2" width="20" height="20" rx="2"/>
+          <path d="M7 12l3-3 3 3 4-4"/>
+        </svg>
+        Gráfico Histórico
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Ferramentas</div>
+      <a class="nav-item" href="#converter" onclick="setActive(this)">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path d="M8 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-3M15 3h6v6M10 14L21 3"/>
+        </svg>
+        Conversor Híbrido
+      </a>
+      <a class="nav-item" href="#arbitrage" onclick="setActive(this)">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <polyline points="17,1 21,5 17,9"/>
+          <path d="M3 11V9a4 4 0 014-4h14M7,23 3,19 7,15"/>
+          <path d="M21 13v2a4 4 0 01-4 4H3"/>
+        </svg>
+        Arbitragem
+      </a>
+      <a class="nav-item" href="#alerts" onclick="setActive(this)">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/>
+        </svg>
+        Alertas
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Pessoal</div>
+      <a class="nav-item" href="#favorites" onclick="setActive(this)">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+        </svg>
+        Favoritos
+      </a>
+    </div>
+  </nav>
+
+  <div class="sidebar-footer">
+    <button class="theme-toggle" onclick="toggleTheme()">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1"     x2="12" y2="3"/>
+        <line x1="12" y1="21"    x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22"  x2="5.64"  y2="5.64"/>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1"  y1="12" x2="3"  y2="12"/>
+        <line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22"  y1="19.78" x2="5.64"  y2="18.36"/>
+        <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
+      </svg>
+      <span id="theme-label">Modo Claro</span>
+      <div class="toggle-track">
+        <div class="toggle-thumb"></div>
+      </div>
+    </button>
+  </div>
+</div>
+
+<!-- Mobile backdrop -->
+<div class="mobile-overlay" id="mobile-overlay" onclick="closeSidebar()"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     MAIN CONTENT (CONTEÚDO PRINCIPAL)
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="main">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="flex items-center gap-2">
+      <button class="hamburger" onclick="openSidebar()">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="3" y1="6"  x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+      <span class="topbar-title">Dashboard</span>
+    </div>
+
+    <div class="topbar-right">
+      <div class="live-badge">
+        <div class="live-dot"></div>
+        TEMPO REAL
+      </div>
+      <button class="refresh-btn" onclick="refreshData()">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"
+             viewBox="0 0 24 24" id="refresh-icon">
+          <polyline points="23,4 23,10 17,10"/>
+          <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+        </svg>
+        Atualizar
+      </button>
+    </div>
+  </div>
+
+  <!-- PAGE CONTENT (CONTEÚDO DA PÁGINA)-->
+  <div class="content">
+
+    <!-- ── MARKET OVERVIEW (VISÃO GERAL DO MERCADO) ─────────────────────────────────────────────── -->
+    <section class="section" id="market">
+      <div class="section-header">
+        <div class="section-title">
+          Visão Geral do Mercado
+          <span class="section-pill" id="last-update">--:--</span>
+        </div>
+      </div>
+
+      <!-- Skeleton cards shown while JS loads real data (TELA DE CARREGAMENTO APARECE ENQUANTO OS DADOS REAIS SÃO CARREGADOS)-->
+      <div class="cards-grid" id="ticker-grid">
+        <div class="ticker-card" style="pointer-events:none">
+          <div class="skeleton" style="height:14px;width:60%;margin-bottom:12px"></div>
+          <div class="skeleton" style="height:28px;width:80%;margin-bottom:8px"></div>
+          <div class="skeleton" style="height:12px;width:50%"></div>
+        </div>
+        <div class="ticker-card" style="pointer-events:none">
+          <div class="skeleton" style="height:14px;width:60%;margin-bottom:12px"></div>
+          <div class="skeleton" style="height:28px;width:80%;margin-bottom:8px"></div>
+          <div class="skeleton" style="height:12px;width:50%"></div>
+        </div>
+        <div class="ticker-card" style="pointer-events:none">
+          <div class="skeleton" style="height:14px;width:60%;margin-bottom:12px"></div>
+          <div class="skeleton" style="height:28px;width:80%;margin-bottom:8px"></div>
+          <div class="skeleton" style="height:12px;width:50%"></div>
+        </div>
+        <div class="ticker-card" style="pointer-events:none">
+          <div class="skeleton" style="height:14px;width:60%;margin-bottom:12px"></div>
+          <div class="skeleton" style="height:28px;width:80%;margin-bottom:8px"></div>
+          <div class="skeleton" style="height:12px;width:50%"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── CHART (GRÁFICOS) ────────────────────────────────────────────────────────── -->
+    <section class="section chart-card" id="chart-section">
+      <div class="section-header" style="margin-bottom:0">
+        <div class="section-title" style="font-size:14px">
+          <span id="chart-asset-label">BTC/USD</span> — Variação Histórica
+        </div>
+        <div class="flex items-center gap-2" style="flex-wrap:wrap;gap:8px">
+          <div class="chart-controls">
+            <button class="period-btn active" onclick="setPeriod('24h',this)">24H</button>
+            <button class="period-btn"        onclick="setPeriod('7d',this)">7D</button>
+            <button class="period-btn"        onclick="setPeriod('30d',this)">30D</button>
+          </div>
+          <div class="color-picker-wrap">
+            <span>Cor</span>
+            <div class="color-wheel" onclick="openColorModal()">
+              <div class="color-swatch" id="color-swatch"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="chart-wrapper">
+        <canvas id="priceChart" role="img" aria-label="Gráfico de variação histórica de preço"></canvas>
+      </div>
+    </section>
+
+    <!-- ── CONVERTER (CONVERSOR HÍBRIDO) ───────────────────────────────────────────── -->
+    <section class="section" id="converter">
+      <div class="section-header">
+        <div class="section-title">Conversor Híbrido</div>
+      </div>
+      <div class="converter-card">
+        <div class="converter-grid">
+
+          <!-- From -->
+          <div class="field-group">
+            <div class="field-label">De</div>
+            <div class="field-row">
+              <input class="amount-input" id="from-amount" type="number" value="1">
+              <select class="currency-select" id="from-currency">
+                <optgroup label="Fiat">
+                  <option value="BRL">BRL</option>
+                  <option value="USD" selected>USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="GBP">GBP</option>
+                </optgroup>
+                <optgroup label="Cripto">
+                  <option value="BTC">BTC</option>
+                  <option value="ETH">ETH</option>
+                  <option value="SOL">SOL</option>
+                  <option value="BNB">BNB</option>
+                </optgroup>
+              </select>
+            </div>
+          </div>
+
+          <!-- Swap -->
+          <button class="swap-btn" onclick="swapCurrencies()">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <polyline points="17,1 21,5 17,9"/>
+              <path d="M3 11V9a4 4 0 014-4h14"/>
+              <polyline points="7,23 3,19 7,15"/>
+              <path d="M21 13v2a4 4 0 01-4 4H3"/>
+            </svg>
+          </button>
+
+          <!-- To -->
+          <div class="field-group">
+            <div class="field-label">Para</div>
+            <div class="field-row">
+              <input class="amount-input" id="to-amount" type="number" readonly placeholder="0.00">
+              <select class="currency-select" id="to-currency">
+                <optgroup label="Cripto">
+                  <option value="BTC" selected>BTC</option>
+                  <option value="ETH">ETH</option>
+                  <option value="SOL">SOL</option>
+                  <option value="BNB">BNB</option>
+                </optgroup>
+                <optgroup label="Fiat">
+                  <option value="BRL">BRL</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="GBP">GBP</option>
+                </optgroup>
+              </select>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="result-display">
+          <div class="result-value" id="result-value">—</div>
+          <div class="result-rate text-sm text-muted" id="result-rate">Carregando taxas...</div>
+        </div>
+
+        <button class="convert-btn" onclick="addToFavorites()">
+          ★ Adicionar par aos Favoritos
+        </button>
+      </div>
+    </section>
+
+    <!-- ── ALERTS + ARBITRAGE GRID (ALERTAS E ARBITRAGEM) ─────────────────────────────────────── -->
+    <div class="alert-grid">
+
+      <!-- Alerts -->
+      <section class="section alert-card" id="alerts">
+        <div class="section-header">
+          <div class="section-title" style="font-size:14px">Alertas de Preço</div>
+        </div>
+        <div class="alert-form">
+          <div class="alert-row">
+            <select class="currency-select" id="alert-asset" style="min-width:80px">
+              <option value="BTC">BTC</option>
+              <option value="ETH">ETH</option>
+              <option value="SOL">SOL</option>
+              <option value="BNB">BNB</option>
+            </select>
+            <input class="alert-input" id="alert-price" type="number" placeholder="Preço alvo (USD)">
+            <select class="currency-select" id="alert-direction" style="min-width:80px">
+              <option value="above">Acima</option>
+              <option value="below">Abaixo</option>
+            </select>
+          </div>
+          <button class="add-alert-btn" onclick="addAlert()">+ Criar Alerta</button>
+        </div>
+        <div class="alerts-list" id="alerts-list">
+          <div class="empty-state">Nenhum alerta criado</div>
+        </div>
+      </section>
+
+      <!-- Arbitrage -->
+      <section class="section alert-card" id="arbitrage">
+        <div class="section-header">
+          <div class="section-title" style="font-size:14px">Arbitragem Simulada</div>
+        </div>
+        <table class="arb-table">
+          <thead>
+            <tr>
+              <th>Ativo</th>
+              <th>Exchange A</th>
+              <th>Exchange B</th>
+              <th>Δ Spread</th>
+            </tr>
+          </thead>
+          <tbody id="arb-body">
+            <tr>
+              <td colspan="4" style="text-align:center;color:var(--text3);padding:20px">
+                Carregando...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+    </div>
+
+    <!-- ── FAVORITES ──────────────────────────────────────────────────── -->
+    <section class="section" id="favorites">
+      <div class="section-header">
+        <div class="section-title">Favoritos</div>
+      </div>
+      <div class="favorites-grid" id="favorites-grid"></div>
+    </section>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+     TABLE OF CONTENTS (desktop only, hidden via CSS on narrow viewports) - TABELA DE CONTEÚDOS (apenas desktop, oculto em telas pequenas via CSS)
+══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ -->
+<nav class="toc" aria-label="Navegação por seção">
+  <a class="toc-item active" href="#market">
+    <div class="toc-dot"></div><span class="toc-label">Mercado</span>
+  </a>
+  <a class="toc-item" href="#chart-section">
+    <div class="toc-dot"></div><span class="toc-label">Gráfico</span>
+  </a>
+  <a class="toc-item" href="#converter">
+    <div class="toc-dot"></div><span class="toc-label">Conversor</span>
+  </a>
+  <a class="toc-item" href="#alerts">
+    <div class="toc-dot"></div><span class="toc-label">Alertas</span>
+  </a>
+  <a class="toc-item" href="#arbitrage">
+    <div class="toc-dot"></div><span class="toc-label">Arbitragem</span>
+  </a>
+  <a class="toc-item" href="#favorites">
+    <div class="toc-dot"></div><span class="toc-label">Favoritos</span>
+  </a>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     TOAST NOTIFICATION (NOTIFICAÇÃO)
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="toast" id="toast" role="alert" aria-live="polite"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     COLOR PICKER MODAL (ESCOLHA DE CORES)
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="color-modal" id="color-modal" onclick="if(event.target===this) closeColorModal()">
+  <div class="color-modal-box">
+    <button class="close-modal-btn" onclick="closeColorModal()">×</button>
+    <div class="color-modal-title">Personalizar Cor</div>
+
+    <div class="color-presets">
+      <div class="color-preset" style="background:#00e5a0" onclick="applyPreset('#00e5a0')"></div>
+      <div class="color-preset" style="background:#0095ff" onclick="applyPreset('#0095ff')"></div>
+      <div class="color-preset" style="background:#c77dff" onclick="applyPreset('#c77dff')"></div>
+      <div class="color-preset" style="background:#ff6b35" onclick="applyPreset('#ff6b35')"></div>
+      <div class="color-preset" style="background:#ff4757" onclick="applyPreset('#ff4757')"></div>
+      <div class="color-preset" style="background:#ffd700" onclick="applyPreset('#ffd700')"></div>
+      <div class="color-preset" style="background:#00b4d8" onclick="applyPreset('#00b4d8')"></div>
+      <div class="color-preset" style="background:#e63946" onclick="applyPreset('#e63946')"></div>
+    </div>
+
+    <div class="color-custom-row">
+      <input class="color-hex-input" id="hex-input" placeholder="#00e5a0" maxlength="7">
+      <button class="apply-color-btn" onclick="applyCustomColor()">Aplicar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     SCRIPTS  (type="module" enables ES module imports in js/)
+════════════════════════════════════════════════════════════════════════════ -->
+<script type="module" src="js/main.js"></script>
+
+</body>
+</html>
