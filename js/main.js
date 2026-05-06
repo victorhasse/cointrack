@@ -1,5 +1,6 @@
 /* ==========================================================================
    Application entry point: state management, event wiring, lifecycle.
+   (Aplication entry point: gerenciamento de estado, ligação de eventos, ciclo de vida).
    ========================================================================== */
 
 import {
