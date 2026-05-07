@@ -46,7 +46,7 @@ cryptotrack-fx/
 
 | CoinTrack | FX Dashboard |
 | :---: | :---: |
-| <img src="" alt="foto1" width="100%"/> | <img src="" alt="foto2" width="100%"/> 
+| <img src="https://github.com/user-attachments/assets/7e602b8e-344b-420a-a958-349dd48c6bd1" alt="screenshot1" width="100%"/> | <img src="https://github.com/user-attachments/assets/c6b04d66-84ea-4971-8b24-4bc737f86273" alt="screenshot2" width="100%"/> 
 
 ## How to Run Locally
 
