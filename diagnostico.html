@@ -6,84 +6,74 @@
 <title>CoinTrack FX — Diagnóstico de API</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'DM Mono', monospace, sans-serif; background: #0a0c10; color: #e8eaf2; padding: 24px; }
-  h1 { font-size: 20px; margin-bottom: 6px; color: #00e5a0; }
-  .sub { color: #7a8299; font-size: 13px; margin-bottom: 28px; }
-  .test { background: #12161f; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
-  .test-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  body { font-family: monospace, sans-serif; background: #0a0c10; color: #e8eaf2; padding: 24px; }
+  h1  { font-size: 20px; margin-bottom: 6px; color: #00e5a0; }
+  .sub{ color: #7a8299; font-size: 13px; margin-bottom: 28px; }
+  .test { background: #12161f; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 20px; margin-bottom: 14px; }
+  .test-header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
   .test-name { font-size: 14px; font-weight: 700; }
-  .badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; }
-  .pending  { background: rgba(255,215,0,0.12);  color: #ffd700; border: 1px solid rgba(255,215,0,0.3); }
-  .ok       { background: rgba(0,201,122,0.12);  color: #00c97a; border: 1px solid rgba(0,201,122,0.3); }
-  .error    { background: rgba(255,71,87,0.12);  color: #ff4757; border: 1px solid rgba(255,71,87,0.3); }
-  .url      { font-size: 11px; color: #4a5068; margin-bottom: 10px; word-break: break-all; }
-  .result   { font-size: 12px; color: #7a8299; background: #0d1118; border-radius: 8px; padding: 12px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; }
+  .badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; flex-shrink: 0; }
+  .pending { background: rgba(255,215,0,0.12);  color: #ffd700; border: 1px solid rgba(255,215,0,0.3); }
+  .ok      { background: rgba(0,201,122,0.12);  color: #00c97a; border: 1px solid rgba(0,201,122,0.3); }
+  .error   { background: rgba(255,71,87,0.12);  color: #ff4757; border: 1px solid rgba(255,71,87,0.3); }
+  .url     { font-size: 11px; color: #4a5068; margin-bottom: 10px; word-break: break-all; }
+  .result  { font-size: 12px; color: #7a8299; background: #0d1118; border-radius: 8px; padding: 12px; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow-y: auto; }
   .result.ok-data  { color: #00c97a; }
   .result.err-data { color: #ff4757; }
-  .run-btn {
-    margin-top: 24px; width: 100%; padding: 14px;
-    background: #00e5a0; color: #000; font-size: 15px; font-weight: 700;
-    border: none; border-radius: 10px; cursor: pointer;
-  }
+  .run-btn { margin-top: 24px; width: 100%; padding: 14px; background: #00e5a0; color: #000; font-size: 15px; font-weight: 700; border: none; border-radius: 10px; cursor: pointer; }
   .run-btn:hover { opacity: 0.85; }
   .run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .summary { margin-top: 20px; padding: 16px; background: #12161f; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); font-size: 13px; color: #7a8299; display: none; }
+  .summary { margin-top: 20px; padding: 16px; background: #12161f; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); font-size: 13px; color: #7a8299; display: none; line-height: 1.7; }
   .summary.show { display: block; }
   .summary b { color: #e8eaf2; }
+  a { color: #00e5a0; }
 </style>
 </head>
 <body>
-
 <h1>🔍 Diagnóstico de API — CoinTrack FX</h1>
-<p class="sub">Abre esta página no browser e clica em "Executar testes" para ver exatamente o que está falhando.</p>
-
+<p class="sub">Todos os dados agora vêm do CoinGecko (CORS liberado). Clique em "Executar" para confirmar.</p>
 <div id="tests"></div>
-
 <button class="run-btn" id="run-btn" onclick="runAll()">▶ Executar todos os testes</button>
-
 <div class="summary" id="summary"></div>
-
 <script>
 const TESTS = [
-  {
-    name: 'Frankfurter — Taxas spot (USD → fiat)',
-    url: 'https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,BRL,JPY,CAD',
-    validate: d => d.rates && Object.keys(d.rates).length >= 4,
-    extract: d => `EUR: ${d.rates?.EUR}  GBP: ${d.rates?.GBP}  BRL: ${d.rates?.BRL}  JPY: ${d.rates?.JPY}`,
-  },
-  {
-    name: 'Frankfurter — Histórico 7 dias (USD → EUR)',
-    url: (() => {
-      const e = new Date(), s = new Date(e - 7*86400000);
-      return `https://api.frankfurter.app/${s.toISOString().slice(0,10)}..${e.toISOString().slice(0,10)}?from=USD&to=EUR`;
-    })(),
-    validate: d => d.rates && Object.keys(d.rates).length > 0,
-    extract: d => `${Object.keys(d.rates).length} dias de dados. Último: ${JSON.stringify(Object.values(d.rates).at(-1))}`,
-  },
   {
     name: 'CoinGecko — Preços spot (BTC, ETH, SOL, BNB)',
     url: 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,binancecoin&vs_currencies=usd&include_24hr_change=true',
     validate: d => d.bitcoin?.usd,
-    extract: d => `BTC: $${d.bitcoin?.usd?.toLocaleString()}  ETH: $${d.ethereum?.usd?.toLocaleString()}  SOL: $${d.solana?.usd?.toLocaleString()}`,
+    extract:  d => `BTC: $${d.bitcoin?.usd?.toLocaleString()}  ETH: $${d.ethereum?.usd?.toLocaleString()}  SOL: $${d.solana?.usd?.toLocaleString()}  BNB: $${d.binancecoin?.usd?.toLocaleString()}`,
   },
   {
-    name: 'CoinGecko — Histórico BTC 7 dias',
+    name: 'CoinGecko — Exchange rates (taxas fiat via BTC)',
+    url: 'https://api.coingecko.com/api/v3/exchange_rates',
+    validate: d => d.rates?.usd?.value && d.rates?.eur?.value,
+    extract:  d => {
+      const r = d.rates;
+      const usdPerBtc = r.usd?.value;
+      const toUSD = sym => usdPerBtc && r[sym] ? (usdPerBtc / r[sym].value).toFixed(4) : '?';
+      return `1 EUR = ${toUSD('eur')} USD  |  1 GBP = ${toUSD('gbp')} USD  |  1 BRL = ${toUSD('brl')} USD  |  1 JPY = ${toUSD('jpy')} USD`;
+    },
+  },
+  {
+    name: 'CoinGecko — Histórico BTC/USD (7 dias)',
     url: 'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=7',
-    validate: d => d.prices?.length > 0,
-    extract: d => `${d.prices?.length} pontos. Último: $${d.prices?.at(-1)?.[1]?.toFixed(2)}`,
+    validate: d => d.prices?.length > 5,
+    extract:  d => `${d.prices?.length} pontos  |  Último: $${d.prices?.at(-1)?.[1]?.toFixed(2)}`,
   },
   {
-    name: 'CoinGecko — Histórico EUR/USD 30 dias (via Frankfurter)',
-    url: (() => {
-      const e = new Date(), s = new Date(e - 30*86400000);
-      return `https://api.frankfurter.app/${s.toISOString().slice(0,10)}..${e.toISOString().slice(0,10)}?from=USD&to=EUR`;
-    })(),
-    validate: d => d.rates && Object.keys(d.rates).length >= 20,
-    extract: d => `${Object.keys(d.rates).length} dias de dados`,
+    name: 'CoinGecko — Histórico BTC/EUR (7 dias) — usado para gráfico EUR/USD',
+    url: 'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=eur&days=7',
+    validate: d => d.prices?.length > 5,
+    extract:  d => `${d.prices?.length} pontos  |  Último: €${d.prices?.at(-1)?.[1]?.toFixed(2)}`,
+  },
+  {
+    name: 'CoinGecko — Histórico BTC/BRL (7 dias)',
+    url: 'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=brl&days=7',
+    validate: d => d.prices?.length > 5,
+    extract:  d => `${d.prices?.length} pontos  |  Último: R$${d.prices?.at(-1)?.[1]?.toFixed(2)}`,
   },
 ];
 
-// Build UI
 const container = document.getElementById('tests');
 TESTS.forEach((t, i) => {
   container.innerHTML += `
@@ -100,67 +90,48 @@ TESTS.forEach((t, i) => {
 async function runTest(t, i) {
   const badge  = document.getElementById(`badge-${i}`);
   const result = document.getElementById(`result-${i}`);
-  badge.className  = 'badge pending';
-  badge.textContent = '⟳ testando...';
-  result.textContent = '...';
-  result.className = 'result';
-
-  const start = Date.now();
+  badge.className = 'badge pending'; badge.textContent = '⟳ testando…';
+  result.textContent = '…'; result.className = 'result';
+  const t0 = Date.now();
   try {
     const res  = await fetch(t.url);
-    const ms   = Date.now() - start;
+    const ms   = Date.now() - t0;
     const text = await res.text();
     let data;
-    try { data = JSON.parse(text); } catch { throw new Error(`Resposta não é JSON: ${text.slice(0, 120)}`); }
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
-    if (!t.validate(data)) throw new Error(`Dados inválidos: ${JSON.stringify(data).slice(0, 200)}`);
-
-    badge.className  = 'badge ok';
-    badge.textContent = `✓ OK (${ms}ms)`;
-    result.className = 'result ok-data';
-    result.textContent = t.extract(data);
+    try { data = JSON.parse(text); } catch { throw new Error(`Resposta não é JSON: ${text.slice(0,100)}`); }
+    if (!res.ok)       throw new Error(`HTTP ${res.status}: ${text.slice(0,150)}`);
+    if (!t.validate(data)) throw new Error(`Dados inesperados: ${JSON.stringify(data).slice(0,150)}`);
+    badge.className = 'badge ok'; badge.textContent = `✓ OK (${ms}ms)`;
+    result.className = 'result ok-data'; result.textContent = t.extract(data);
     return true;
   } catch (err) {
-    const ms = Date.now() - start;
-    badge.className  = 'badge error';
-    badge.textContent = `✗ Erro (${ms}ms)`;
-    result.className = 'result err-data';
-    result.textContent = err.message || String(err);
+    const ms = Date.now() - t0;
+    badge.className = 'badge error'; badge.textContent = `✗ Erro (${ms}ms)`;
+    result.className = 'result err-data'; result.textContent = err.message || String(err);
     return false;
   }
 }
 
 async function runAll() {
   const btn = document.getElementById('run-btn');
-  btn.disabled = true;
-  btn.textContent = '⟳ Testando...';
-
+  btn.disabled = true; btn.textContent = '⟳ Testando…';
   const results = [];
-  for (let i = 0; i < TESTS.length; i++) {
-    results.push(await runTest(TESTS[i], i));
-  }
-
-  const ok    = results.filter(Boolean).length;
-  const total = results.length;
+  for (let i = 0; i < TESTS.length; i++) results.push(await runTest(TESTS[i], i));
+  const ok = results.filter(Boolean).length;
   const summary = document.getElementById('summary');
   summary.classList.add('show');
-
-  if (ok === total) {
-    summary.innerHTML = `<b>✅ Tudo funcionando!</b> ${ok}/${total} testes passaram.<br><br>
-      Se o dashboard ainda mostrar erro, o problema pode ser <b>rate limit</b> (muitas requisições em sequência).
-      Aguarde 1 minuto e recarregue.`;
+  if (ok === TESTS.length) {
+    summary.innerHTML = `<b>✅ Tudo OK!</b> ${ok}/${TESTS.length} testes passaram.<br>
+    O dashboard deve carregar os dados reais sem erros.`;
   } else {
-    const failed = TESTS.filter((_, i) => !results[i]).map(t => `• ${t.name}`).join('<br>');
-    summary.innerHTML = `<b>⚠️ ${total - ok} teste(s) falharam:</b><br><br>${failed}<br><br>
-      <b>Causas comuns:</b><br>
-      • <b>CORS</b> — API não permite requisições do seu domínio (testar localhost vs produção)<br>
-      • <b>Rate limit</b> — CoinGecko gratuito permite ~30 req/min. Aguarde e tente novamente<br>
-      • <b>Sem internet</b> — verifique a conexão<br>
-      • <b>API fora do ar</b> — visite o status em <a href="https://status.coingecko.com" target="_blank" style="color:#00e5a0">status.coingecko.com</a>`;
+    const failed = TESTS.filter((_,i) => !results[i]).map(t => `• ${t.name}`).join('<br>');
+    summary.innerHTML = `<b>⚠️ ${TESTS.length - ok} falha(s):</b><br><br>${failed}<br><br>
+    <b>Causas prováveis:</b><br>
+    • <b>Rate limit</b> — CoinGecko gratuito: ~30 req/min. Aguarde 1 min e tente novamente<br>
+    • <b>Sem internet</b> — verifique a conexão<br>
+    • <b>CoinGecko fora do ar</b> — verifique <a href="https://status.coingecko.com" target="_blank">status.coingecko.com</a>`;
   }
-
-  btn.disabled = false;
-  btn.textContent = '↻ Executar novamente';
+  btn.disabled = false; btn.textContent = '↻ Executar novamente';
 }
 </script>
 </body>

@@ -179,19 +179,16 @@ const FALLBACK = {
   BNB: { price: 612,     change24h:  0.89, isFiat: false },
 };
 
-// ── PRICE FETCHING (Busca de Preços) ─────────────────────────────────────────────────────────────
+// ── PRICE FETCHING ────────────────────────────────────────────────────────────
+//
+// using CoinGecko for EVERYTHING — it has CORS headers open for all
+// origins (including localhost and file://) and generous rate limits (50-100 calls/minute). No need for a backend proxy.
+//
+// Fiat rates come from CoinGecko /exchange_rates which returns each currency
+// value relative to BTC. We convert: price_in_USD = btc_price / fiat_btc_rate.
+//
+// Crypto prices come from the usual /simple/price endpoint
 
-/**
- * Generic fetch with:
- *  - Automatic retry on 429 (rate limit) — waits retryAfter seconds
- *  - Detailed console logging for debugging
- *  - Timeout after `timeoutMs` ms (default 8s)
- * --------------------------
- * Busca genérica com:
- *  - Repetição automática em 429 (limite de taxa) — espera retryAfter segundos
- *  - Registro detalhado no console para depuração
- *  - Tempo limite após `timeoutMs` ms (padrão 8s)
- */
 async function _fetch(url, { timeoutMs = 8000, retries = 1 } = {}) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController();
@@ -199,42 +196,63 @@ async function _fetch(url, { timeoutMs = 8000, retries = 1 } = {}) {
     try {
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timer);
-
-      // Rate limited — respect Retry-After header if present
-      // Limita a taxa — respeita o cabeçalho Retry-After se presente
       if (res.status === 429) {
         const wait = parseInt(res.headers.get('Retry-After') ?? '61', 10) * 1000;
-        console.warn(`[CryptoTrack] Rate limited by ${url}. Waiting ${wait / 1000}s…`);
-        if (attempt < retries) {
-          await new Promise(r => setTimeout(r, Math.min(wait, 10000)));
-          continue;
-        }
-        throw new Error(`HTTP 429 — rate limit on ${url}`);
+        console.warn(`[CryptoTrack] Rate limited. Waiting ${Math.round(wait/1000)}s…`);
+        if (attempt < retries) { await new Promise(r => setTimeout(r, Math.min(wait, 12000))); continue; }
+        throw new Error(`HTTP 429 — rate limit`);
       }
-
       if (!res.ok) {
         const body = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status} from ${url}: ${body.slice(0, 120)}`);
+        throw new Error(`HTTP ${res.status}: ${body.slice(0, 120)}`);
       }
-
       return res;
     } catch (err) {
       clearTimeout(timer);
-      if (err.name === 'AbortError') throw new Error(`Timeout after ${timeoutMs}ms: ${url}`);
+      if (err.name === 'AbortError') throw new Error(`Timeout após ${timeoutMs}ms`);
       throw err;
     }
   }
 }
 
+/**
+ * Fetches fiat exchange rates using CoinGecko /exchange_rates.
+ * That endpoint returns how many units of each fiat = 1 BTC.
+ * We also fetch the BTC/USD price to convert everything to USD.
+ *
+ * Returns { USD: 1, EUR: 1.087, BRL: 0.174, ... }
+ */
 async function fetchFiatRates() {
-  const syms = Object.keys(FIAT_META).filter(s => s !== 'USD').join(',');
-  const url  = `https://api.frankfurter.app/latest?from=USD&to=${syms}`;
-  const res  = await _fetch(url, { retries: 1 });
-  const data = await res.json();
-  if (!data.rates) throw new Error('Frankfurter: resposta sem campo "rates"');
+  // Fetch both in parallel: BTC price in USD + all fiat/BTC rates
+  const [priceRes, ratesRes] = await Promise.all([
+    _fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd'),
+    _fetch('https://api.coingecko.com/api/v3/exchange_rates'),
+  ]);
+
+  const priceData = await priceRes.json();
+  const ratesData = await ratesRes.json();
+
+  const btcUsd   = priceData?.bitcoin?.usd;
+  const cgRates  = ratesData?.rates;
+
+  if (!btcUsd || !cgRates) throw new Error('CoinGecko exchange_rates: resposta inválida');
+
+  // cgRates[sym].value = units of sym per 1 BTC
+  // So 1 USD in BTC = 1 / cgRates.usd.value
+  // And 1 EUR in USD = cgRates.usd.value / cgRates.eur.value
+  const usdPerBtc = cgRates['usd']?.value;
+  if (!usdPerBtc) throw new Error('USD rate not found in exchange_rates');
+
+  const FIAT_CG_KEYS = { USD: 'usd', EUR: 'eur', GBP: 'gbp', BRL: 'brl', JPY: 'jpy', CAD: 'cad' };
+
   const out = { USD: 1 };
-  for (const [sym, rate] of Object.entries(data.rates)) out[sym] = 1 / rate;
-  console.info('[CryptoTrack] Fiat rates OK:', out);
+  for (const [sym, cgKey] of Object.entries(FIAT_CG_KEYS)) {
+    if (sym === 'USD') continue;
+    const val = cgRates[cgKey]?.value;
+    if (val) out[sym] = usdPerBtc / val;  // USD value of 1 unit of sym
+  }
+
+  console.info('[CryptoTrack] Fiat rates via CoinGecko OK:', out);
   return out;
 }
 
@@ -253,15 +271,6 @@ async function fetchCryptoPrices() {
   return out;
 }
 
-/**
- * Main entry point — fetches fiat and crypto in parallel.
- * Each source has its own try/catch so one failure doesn't block the other.
- * `onError(source, err)` is called for each failure, so the UI can log specifically.
- * ------------------------------
- * Ponto de entrada principal — busca moedas fiduciárias e criptomoedas em paralelo.
- * Cada fonte tem seu próprio try/catch para que uma falha não bloqueie a outra.
- * `onError(source, err)` é chamado para cada falha, para que a interface possa registrar especificamente.
- */
 export async function fetchPrices(onError) {
   const result = {};
 
@@ -270,7 +279,6 @@ export async function fetchPrices(onError) {
     fetchCryptoPrices(),
   ]);
 
-  // Fiat (Fiduciários)
   if (fiatResult.status === 'fulfilled') {
     const rates = fiatResult.value;
     for (const [sym, meta] of Object.entries(FIAT_META)) {
@@ -285,7 +293,6 @@ export async function fetchPrices(onError) {
     for (const [sym, meta] of Object.entries(FIAT_META)) result[sym] = { ...meta, ...FALLBACK[sym] };
   }
 
-  // Crypto
   if (cryptoResult.status === 'fulfilled') {
     const crypto = cryptoResult.value;
     for (const [sym, meta] of Object.entries(CRYPTO_META)) {
@@ -305,7 +312,14 @@ export function getUSDPrice(sym, prices) {
   return prices[sym]?.price ?? FALLBACK[sym]?.price ?? 1;
 }
 
-// ── CHART HISTORY (Histórico Gráfico) ──────────────────────────────────────────────────────────────
+// ── CHART HISTORY ─────────────────────────────────────────────────────────────
+//
+// For fiat: CoinGecko doesn't have timeseries for fiat pairs directly, but we
+// can compute EUR/USD history by dividing BTC/USD by BTC/EUR from the
+// /coins/bitcoin/market_chart endpoint with vs_currency=eur and vs_currency=usd.
+//
+// Approach: fetch BTC in USD and BTC in target fiat, then divide point-by-point
+// to get (target fiat) / USD over time. Accurate and CORS-friendly.
 
 export async function fetchHistory(sym, period, locale, prices) {
   const isFiat = !!FIAT_META[sym];
@@ -313,36 +327,59 @@ export async function fetchHistory(sym, period, locale, prices) {
     return isFiat
       ? await _fiatHistory(sym, period, locale)
       : await _cryptoHistory(sym, period, locale);
-  } catch {
+  } catch (err) {
+    console.warn('[CryptoTrack] History fallback for', sym, ':', err.message);
     return _fallbackHistory(prices[sym]?.price ?? FALLBACK[sym]?.price ?? 1, period, locale, isFiat);
   }
 }
 
 async function _fiatHistory(sym, period, locale) {
-  const { start, end } = _dateRange(period);
-  const url = sym === 'USD'
-    ? `https://api.frankfurter.app/${start}..${end}?from=EUR&to=USD`
-    : `https://api.frankfurter.app/${start}..${end}?from=USD&to=${sym}`;
-  const res  = await fetch(url);
-  if (!res.ok) throw new Error('Frankfurter history error');
-  const json    = await res.json();
-  const entries = Object.entries(json.rates ?? {}).sort(([a],[b]) => a.localeCompare(b));
-  const loc     = locale === 'en' ? 'en-US' : 'pt-BR';
-  return {
-    labels: entries.map(([date]) => new Date(date+'T12:00:00Z').toLocaleDateString(loc, _labelFmt(period))),
-    data:   entries.map(([, r]) => {
-      const raw = sym === 'USD' ? r['USD'] : 1 / (r[sym] ?? 1);
-      return Math.round(raw * 1e6) / 1e6;
-    }),
-  };
+  if (sym === 'USD') {
+    // USD/USD is trivially 1 — show a flat line with tiny noise from fallback
+    return _fallbackHistory(1, period, locale, true);
+  }
+
+  const days = _periodDays(period);
+  const cgSym = { EUR:'eur', GBP:'gbp', BRL:'brl', JPY:'jpy', CAD:'cad' }[sym];
+  if (!cgSym) throw new Error('Unknown fiat: ' + sym);
+
+  // Fetch BTC price in USD and in the target fiat simultaneously
+  const [usdRes, fiatRes] = await Promise.all([
+    _fetch(`https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=${days}`),
+    _fetch(`https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=${cgSym}&days=${days}`),
+  ]);
+
+  const usdData  = await usdRes.json();
+  const fiatData = await fiatRes.json();
+
+  const usdPrices  = usdData.prices  ?? [];
+  const fiatPrices = fiatData.prices ?? [];
+
+  // Align by length (both should be equal, but be safe)
+  const len  = Math.min(usdPrices.length, fiatPrices.length);
+  const step = Math.max(1, Math.floor(len / 60));
+
+  const loc    = locale === 'en' ? 'en-US' : 'pt-BR';
+  const labels = [], data = [];
+
+  for (let i = 0; i < len; i += step) {
+    const btcUsd  = usdPrices[i][1];
+    const btcFiat = fiatPrices[i][1];
+    if (!btcFiat) continue;
+    // 1 unit of fiat = btcUsd / btcFiat USD
+    const fiatInUsd = btcUsd / btcFiat;
+    labels.push(new Date(usdPrices[i][0]).toLocaleDateString(loc, _labelFmt(period)));
+    data.push(Math.round(fiatInUsd * 1e6) / 1e6);
+  }
+
+  return { labels, data };
 }
 
 async function _cryptoHistory(sym, period, locale) {
   const cgId = CRYPTO_META[sym]?.cgId;
-  if (!cgId) throw new Error('Unknown');
+  if (!cgId) throw new Error('Unknown crypto: ' + sym);
   const days    = _periodDays(period);
-  const res     = await fetch(`https://api.coingecko.com/api/v3/coins/${cgId}/market_chart?vs_currency=usd&days=${days}`);
-  if (!res.ok) throw new Error('CoinGecko history error');
+  const res     = await _fetch(`https://api.coingecko.com/api/v3/coins/${cgId}/market_chart?vs_currency=usd&days=${days}`);
   const json    = await res.json();
   const raw     = json.prices ?? [];
   const step    = Math.max(1, Math.floor(raw.length / 60));
@@ -352,24 +389,6 @@ async function _cryptoHistory(sym, period, locale) {
     labels: sampled.map(([ts]) => new Date(ts).toLocaleDateString(loc, _labelFmt(period))),
     data:   sampled.map(([, p]) => Math.round(p * 100) / 100),
   };
-}
-
-function _fallbackHistory(basePrice, period, locale, isFiat) {
-  const days   = _periodDays(period);
-  const points = Math.min(60, days);
-  const vol    = isFiat ? 0.004 : ({ '1d':0.015,'7d':0.04,'1m':0.06,'3m':0.09,'1y':0.13,'5y':0.22 }[period] ?? 0.03);
-  const stepMs = (days * 86_400_000) / points;
-  const loc    = locale === 'en' ? 'en-US' : 'pt-BR';
-  const now    = Date.now();
-  let p = basePrice * (0.88 + Math.random() * 0.12);
-  const labels = [], data = [];
-  for (let i = 0; i < points; i++) {
-    p = p * (1 + (Math.random() - 0.48) * vol);
-    labels.push(new Date(now - (points-1-i) * stepMs).toLocaleDateString(loc, _labelFmt(period)));
-    data.push(Math.round(p * 10000) / 10000);
-  }
-  data[data.length - 1] = basePrice;
-  return { labels, data };
 }
 
 export function generateSparkline(basePrice, isUp, points = 20) {
